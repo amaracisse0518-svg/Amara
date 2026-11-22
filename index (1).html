@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voxbloom</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f3b3d">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Voxbloom">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/*
+VOICE: outil de classe, clair et calme
+IDEA: un carnet de notes qui s'écrit tout seul quand on parle
+PICTURE: grand bouton micro + onde sonore en direct + page de transcription
+COLOUR and TYPE: blanc, noir, jaune vif ; rouge pour l'enregistrement ; Hanken Grotesk
+LAYOUT: une colonne, micro et réglages en haut, texte, actions, historique
+*/
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#1a1a19);--ink:light-dark(#141414,#f2f2ee);--soft:light-dark(#d8d8d4,#3a3a37);--muted:light-dark(#5c5c58,#a8a8a2);--acc:#ffe600;--rec:#e0352b}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Hanken Grotesk",system-ui,sans-serif;overflow-x:clip}
+main{max-width:800px;margin:0 auto;padding:clamp(20px,4vw,48px) 16px}
+h1{font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0 0 6px;font-weight:700}
+h2{font-size:20px;margin:36px 0 10px}
+.sub{color:var(--muted);margin:0 0 24px}
+.top{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+#mic{width:96px;height:96px;border-radius:50%;border:0;background:var(--ink);color:var(--bg);cursor:pointer;display:grid;place-items:center;position:relative;flex:none}
+#mic svg{width:40px;height:40px}
+#mic.on{background:var(--rec);color:#fff}
+#mic.on::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:3px solid var(--rec);animation:pulse 1.4s ease-out infinite}
+@keyframes pulse{from{transform:scale(.9);opacity:1}to{transform:scale(1.25);opacity:0}}
+@media(prefers-reduced-motion:reduce){#mic.on::after{animation:none}}
+:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
+.state{flex:1;min-width:240px}
+#status{font-weight:700;font-size:18px}
+#wave{display:flex;gap:3px;align-items:center;height:36px;margin-top:6px}
+#wave i{display:block;width:5px;height:4px;border-radius:3px;background:var(--soft);transition:height .08s}
+#wave.on i{background:var(--rec)}
+.opts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px;margin-bottom:12px}
+@media(max-width:600px){.opts{grid-template-columns:minmax(0,1fr)}}
+input[type=search],select{font:inherit;font-size:16px;padding:8px 10px;border-radius:8px;border:1px solid var(--soft);background:var(--bg);color:var(--ink);min-height:44px;width:100%}
+.toggles{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:16px}
+label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);min-height:32px}
+.paper{border:1px solid var(--soft);border-radius:12px;padding:16px}
+textarea{width:100%;min-height:240px;border:0;background:transparent;color:var(--ink);font:inherit;font-size:17px;resize:vertical}
+#interim{color:var(--muted);font-style:italic;min-height:1.5em}
+.meta{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;margin-top:8px;flex-wrap:wrap;gap:8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+button.b{font:inherit;font-weight:500;min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer}
+button.main{background:var(--acc);border-color:var(--acc);color:#141414}
+#err{background:light-dark(#fff4f3,#3a1c1a);border-left:4px solid var(--rec);padding:12px 14px;border-radius:6px;margin-bottom:18px;display:none}
+#hist{list-style:none;padding:0;margin:0}
+#hist li{border-top:1px solid var(--soft);padding:10px 0;display:flex;gap:10px;align-items:center}
+#hist li span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hist small{color:var(--muted);white-space:nowrap}
+#hist button{min-height:36px;padding:0 10px}
+.empty{color:var(--muted)}
+details{margin-top:28px;border-top:1px solid var(--soft);padding-top:12px}
+summary{cursor:pointer;font-weight:700}
+table{border-collapse:collapse;width:100%;font-size:15px;margin-top:8px}
+td{padding:6px 8px;border-bottom:1px solid var(--soft);vertical-align:top}
+footer{color:var(--muted);font-size:14px;margin-top:32px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Voxbloom</h1>
+  <p class="sub">Parle dans plus de 100 langues et variantes : ton texte s'écrit, se ponctue et se corrige à la voix.</p>
+
+  <div id="err"></div>
+  <button class="b main" id="install" hidden style="margin-bottom:18px">Installer l'appli sur cet appareil</button>
+
+  <div class="top">
+    <button id="mic" aria-label="Démarrer la dictée (Ctrl+M)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+    </button>
+    <div class="state">
+      <div id="status">Prêt · appuie sur le micro ou Ctrl+M</div>
+      <div id="wave" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div class="opts">
+    <input type="search" id="find" placeholder="Chercher une langue…" aria-label="Chercher une langue">
+    <select id="lang" aria-label="Langue de dictée"></select>
+  </div>
+
+  <div class="toggles">
+    <label class="chk"><input type="checkbox" id="autoP" checked> Ponctuation automatique</label>
+    <label class="chk"><input type="checkbox" id="cmds" checked> Commandes vocales</label>
+    <label class="chk"><input type="checkbox" id="autoStop"> Arrêt après 10 s de silence</label>
+  </div>
+
+  <div class="paper">
+    <textarea id="out" placeholder="Ton texte apparaîtra ici…" aria-label="Transcription"></textarea>
+    <div id="interim" aria-live="polite"></div>
+  </div>
+  <div class="meta"><span id="count">0 mot · 0 caractère</span><span id="timer">00:00</span></div>
+
+  <div class="actions">
+    <button class="b main" id="copy">Copier</button>
+    <button class="b" id="read">Lire à voix haute</button>
+    <button class="b" id="save">Télécharger (.txt)</button>
+    <button class="b" id="undo">Annuler</button>
+    <button class="b" id="clear">Effacer</button>
+  </div>
+
+  <h2>Historique</h2>
+  <ul id="hist"></ul>
+
+  <details>
+    <summary>Commandes vocales disponibles</summary>
+    <table>
+      <tr><td><b>Ponctuation</b></td><td>« virgule », « point », « point d'interrogation », « point d'exclamation », « deux points », « point-virgule », « points de suspension », « ouvrez les guillemets » / « fermez les guillemets », « ouvrez la parenthèse » / « fermez la parenthèse », « à la ligne », « nouveau paragraphe ». En anglais : “comma”, “period”, “question mark”, “new line”…</td></tr>
+      <tr><td><b>Corriger</b></td><td>« efface le dernier mot », « efface la dernière phrase », « annule », « tout effacer ». En anglais : “delete last word”, “delete last sentence”, “undo”, “clear all”.</td></tr>
+      <tr><td><b>Contrôler</b></td><td>« arrête la dictée », « lis le texte ». En anglais : “stop dictation”, “read it”.</td></tr>
+    </table>
+  </details>
+
+  <footer>Fonctionne dans Google Chrome ou Microsoft Edge, avec internet. La reconnaissance utilise l'API Web Speech du navigateur : les langues proposées sont celles qu'elle reconnaît.</footer>
+</main>
+
+<script>
+{
+const $ = id => document.getElementById(id);
+const out = $('out'), interimEl = $('interim'), mic = $('mic'), statusEl = $('status'), errEl = $('err'), wave = $('wave');
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, undoStack = [], startTime = 0, tick = null, lastSpeech = 0;
+let audioCtx = null, stream = null, raf = null;
+
+// ---------- Langues ----------
+const LANGS = [
+["Afrikaans","af-ZA"],["አማርኛ (Amharique)","am-ET"],["العربية (Algérie)","ar-DZ"],["العربية (Arabie saoudite)","ar-SA"],["العربية (Bahreïn)","ar-BH"],["العربية (Égypte)","ar-EG"],["العربية (Émirats)","ar-AE"],["العربية (Irak)","ar-IQ"],["العربية (Jordanie)","ar-JO"],["العربية (Koweït)","ar-KW"],["العربية (Liban)","ar-LB"],["العربية (Maroc)","ar-MA"],["العربية (Oman)","ar-OM"],["العربية (Qatar)","ar-QA"],["العربية (Tunisie)","ar-TN"],
+["Azərbaycanca","az-AZ"],["Български","bg-BG"],["বাংলা (Bangladesh)","bn-BD"],["বাংলা (Inde)","bn-IN"],["Bosanski","bs-BA"],["Català","ca-ES"],["Čeština","cs-CZ"],["Dansk","da-DK"],["Deutsch (Deutschland)","de-DE"],["Deutsch (Österreich)","de-AT"],["Deutsch (Schweiz)","de-CH"],["Ελληνικά","el-GR"],
+["English (Australia)","en-AU"],["English (Canada)","en-CA"],["English (Ghana)","en-GH"],["English (India)","en-IN"],["English (Ireland)","en-IE"],["English (Kenya)","en-KE"],["English (New Zealand)","en-NZ"],["English (Nigeria)","en-NG"],["English (Philippines)","en-PH"],["English (South Africa)","en-ZA"],["English (Tanzania)","en-TZ"],["English (United Kingdom)","en-GB"],["English (United States)","en-US"],
+["Español (Argentina)","es-AR"],["Español (Bolivia)","es-BO"],["Español (Chile)","es-CL"],["Español (Colombia)","es-CO"],["Español (Costa Rica)","es-CR"],["Español (Ecuador)","es-EC"],["Español (El Salvador)","es-SV"],["Español (España)","es-ES"],["Español (Estados Unidos)","es-US"],["Español (Guatemala)","es-GT"],["Español (Honduras)","es-HN"],["Español (México)","es-MX"],["Español (Nicaragua)","es-NI"],["Español (Panamá)","es-PA"],["Español (Paraguay)","es-PY"],["Español (Perú)","es-PE"],["Español (Puerto Rico)","es-PR"],["Español (Rep. Dominicana)","es-DO"],["Español (Uruguay)","es-UY"],["Español (Venezuela)","es-VE"],
+["Eesti","et-EE"],["Euskara","eu-ES"],["فارسی (Persan)","fa-IR"],["Suomi","fi-FI"],["Filipino","fil-PH"],["Français (France)","fr-FR"],["Français (Belgique)","fr-BE"],["Français (Canada)","fr-CA"],["Français (Suisse)","fr-CH"],["Galego","gl-ES"],["ગુજરાતી","gu-IN"],["עברית (Hébreu)","he-IL"],["हिन्दी","hi-IN"],["Hrvatski","hr-HR"],["Magyar","hu-HU"],["Հայերեն","hy-AM"],["Bahasa Indonesia","id-ID"],["Íslenska","is-IS"],["Italiano (Italia)","it-IT"],["Italiano (Svizzera)","it-CH"],["日本語","ja-JP"],["Basa Jawa","jv-ID"],["ქართული","ka-GE"],["Қазақ","kk-KZ"],["ភាសាខ្មែរ","km-KH"],["ಕನ್ನಡ","kn-IN"],["한국어","ko-KR"],["ລາວ","lo-LA"],["Lietuvių","lt-LT"],["Latviešu","lv-LV"],["Македонски","mk-MK"],["മലയാളം","ml-IN"],["Монгол","mn-MN"],["मराठी","mr-IN"],["Bahasa Melayu","ms-MY"],["မြန်မာ","my-MM"],["Norsk bokmål","nb-NO"],["नेपाली","ne-NP"],["Nederlands (Nederland)","nl-NL"],["Nederlands (België)","nl-BE"],["ਪੰਜਾਬੀ","pa-Guru-IN"],["Polski","pl-PL"],["Português (Brasil)","pt-BR"],["Português (Portugal)","pt-PT"],["Română","ro-RO"],["Русский","ru-RU"],["සිංහල","si-LK"],["Slovenčina","sk-SK"],["Slovenščina","sl-SI"],["Shqip","sq-AL"],["Српски","sr-RS"],["Basa Sunda","su-ID"],["Svenska","sv-SE"],["Kiswahili (Kenya)","sw-KE"],["Kiswahili (Tanzania)","sw-TZ"],["தமிழ் (இந்தியா)","ta-IN"],["தமிழ் (இலங்கை)","ta-LK"],["தமிழ் (மலேசியா)","ta-MY"],["தமிழ் (சிங்கப்பூர்)","ta-SG"],["తెలుగు","te-IN"],["ภาษาไทย","th-TH"],["Türkçe","tr-TR"],["Українська","uk-UA"],["اردو (پاکستان)","ur-PK"],["اردو (بھارت)","ur-IN"],["Oʻzbekcha","uz-UZ"],["Tiếng Việt","vi-VN"],["中文 (普通话, 中国大陆)","cmn-Hans-CN"],["中文 (普通话, 台灣)","cmn-Hant-TW"],["中文 (粵語, 香港)","yue-Hant-HK"],["isiZulu","zu-ZA"]
+];
+const langSel = $('lang');
+function fillLangs(filter){
+  const f = (filter || '').toLowerCase();
+  const cur = langSel.value;
+  const list = LANGS.filter(([n, c]) => !f || n.toLowerCase().includes(f) || c.toLowerCase().includes(f));
+  langSel.innerHTML = list.map(([n, c]) => `<option value="${c}">${n} — ${c}</option>`).join('');
+  if (list.some(l => l[1] === cur)) langSel.value = cur;
+}
+fillLangs('');
+let saved = null; try { saved = localStorage.getItem('dv-lang'); } catch (_) {}
+const nav = navigator.language || 'fr-FR';
+langSel.value = saved || (LANGS.find(l => l[1] === nav) || LANGS.find(l => l[1].startsWith(nav.slice(0,2))) || ['', 'fr-FR'])[1];
+$('find').addEventListener('input', e => fillLangs(e.target.value));
+langSel.addEventListener('change', () => {
+  try { localStorage.setItem('dv-lang', langSel.value); } catch (_) {}
+  if (listening) { stop(true); start(); }
+});
+const isFr = () => langSel.value.startsWith('fr');
+const isEn = () => langSel.value.startsWith('en');
+
+// ---------- Ponctuation dictée ----------
+const P_FR = [
+  [/\s*point d'interrogation/gi,' ?'],[/\s*point d'exclamation/gi,' !'],[/\s*points de suspension/gi,'…'],
+  [/\s*deux[- ]points/gi,' :'],[/\s*point[- ]virgule/gi,' ;'],[/\s*virgule/gi,','],
+  [/\s*ouvre[zr]? les guillemets\s*/gi,' « '],[/\s*ferme[zr]? les guillemets/gi,' »'],
+  [/\s*ouvre[zr]? (la )?parenthèse\s*/gi,' ('],[/\s*ferme[zr]? (la )?parenthèse/gi,')'],
+  [/\s*nouveau paragraphe\s*/gi,'\n\n'],[/\s*(à la ligne|nouvelle ligne)\s*/gi,'\n'],[/\s*point\b/gi,'.']
+];
+const P_EN = [
+  [/\s*question mark/gi,'?'],[/\s*exclamation (mark|point)/gi,'!'],[/\s*semicolon/gi,';'],[/\s*colon/gi,':'],
+  [/\s*comma/gi,','],[/\s*(full stop|period)\b/gi,'.'],[/\s*open quote\s*/gi,' "'],[/\s*close quote/gi,'"'],
+  [/\s*new paragraph\s*/gi,'\n\n'],[/\s*new line\s*/gi,'\n']
+];
+// Mots qui ouvrent une question (pour la ponctuation automatique)
+const Q_FR = /^(est-ce que|est ce que|pourquoi|comment|quand|où|ou est|qui|quoi|quel|quelle|quels|quelles|combien|lequel|laquelle|as-tu|peux-tu|veux-tu|sais-tu|avez-vous|pouvez-vous)\b/i;
+const Q_EN = /^(who|what|when|where|why|how|which|is|are|do|does|did|can|could|would|should|will|have|has)\b/i;
+
+function format(raw){
+  let t = raw.trim();
+  if (!t) return '';
+  if (isFr()) P_FR.forEach(([re, r]) => t = t.replace(re, r));
+  if (isEn()) P_EN.forEach(([re, r]) => t = t.replace(re, r));
+  t = t.replace(/[ \t]+([,.])/g, '$1').trim();
+  if ($('autoP').checked && !/[.,;:!?…»)"\n]$/.test(t)) {
+    const q = (isFr() && Q_FR.test(t)) || (isEn() && Q_EN.test(t));
+    t += q ? (isFr() ? ' ?' : '?') : '.';
+  }
+  return t;
+}
+function capitalize(prev, t){
+  const end = prev.replace(/[ \t]+$/, '');
+  if (!end || /[.!?…\n]$/.test(end)) return t.replace(/^(\s*[«"(]?\s*)(\p{L})/u, (m, a, b) => a + b.toLocaleUpperCase());
+  return t;
+}
+function append(raw){
+  const t0 = format(raw);
+  if (!t0) return;
+  pushUndo();
+  const t = capitalize(out.value, t0);
+  const needSpace = out.value && !/\s$/.test(out.value) && !/^[,.;:!?…)\n»]/.test(t) && !/^ /.test(t);
+  out.value += (needSpace ? ' ' : '') + t;
+  out.scrollTop = out.scrollHeight;
+  updateCount();
+}
+
+// ---------- Commandes vocales ----------
+function command(raw){
+  if (!$('cmds').checked) return false;
+  const c = raw.trim().toLowerCase().replace(/[.!?]$/, '');
+  const is = (...arr) => arr.some(a => c === a);
+  if (is('efface le dernier mot','supprime le dernier mot','delete last word','delete the last word')) {
+    pushUndo(); out.value = out.value.replace(/\s*\S+\s*$/, ''); updateCount(); return true;
+  }
+  if (is('efface la dernière phrase','supprime la dernière phrase','delete last sentence','delete the last sentence')) {
+    pushUndo(); out.value = out.value.replace(/[^.!?…\n]*[.!?…]?\s*$/, '').trimEnd(); updateCount(); return true;
+  }
+  if (is('annule','annuler','undo')) { undo(); return true; }
+  if (is('tout effacer','efface tout','clear all','delete everything')) { clearAll(); return true; }
+  if (is('arrête la dictée','arrête','stop dictation','stop listening')) { stop(); return true; }
+  if (is('lis le texte','lis-moi le texte','read it','read the text')) { readAloud(); return true; }
+  return false;
+}
+
+// ---------- Utilitaires ----------
+function pushUndo(){ undoStack.push(out.value); if (undoStack.length > 100) undoStack.shift(); }
+function undo(){ if (undoStack.length) { out.value = undoStack.pop(); updateCount(); } }
+function clearAll(){ if (out.value) { pushUndo(); out.value = ''; updateCount(); } }
+function updateCount(){
+  const v = out.value.trim();
+  const n = v ? v.split(/\s+/).length : 0;
+  $('count').textContent = `${n} ${n > 1 ? 'mots' : 'mot'} · ${out.value.length} caractère${out.value.length > 1 ? 's' : ''}`;
+  try { localStorage.setItem('dv-draft', out.value); } catch (_) {}
+}
+function updateTimer(){
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  $('timer').textContent = String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+  if ($('autoStop').checked && Date.now() - lastSpeech > 10000) stop();
+}
+const showErr = m => { errEl.textContent = m; errEl.style.display = 'block'; };
+const hideErr = () => { errEl.style.display = 'none'; };
+
+// ---------- Onde sonore ----------
+wave.innerHTML = '<i></i>'.repeat(28);
+const bars = [...wave.children];
+async function startWave(){
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const an = audioCtx.createAnalyser(); an.fftSize = 64;
+    audioCtx.createMediaStreamSource(stream).connect(an);
+    const data = new Uint8Array(an.frequencyBinCount);
+    wave.classList.add('on');
+    const draw = () => {
+      an.getByteFrequencyData(data);
+      bars.forEach((b, i) => b.style.height = Math.max(4, data[i % data.length] / 255 * 36) + 'px');
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+  } catch (_) { /* l'onde est facultative */ }
+}
+function stopWave(){
+  cancelAnimationFrame(raf);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+  stream = audioCtx = null;
+  wave.classList.remove('on');
+  bars.forEach(b => b.style.height = '4px');
+}
+
+// ---------- Reconnaissance ----------
+function setup(){
+  rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  rec.lang = langSel.value;
+  rec.onresult = e => {
+    lastSpeech = Date.now();
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) { if (!command(r[0].transcript)) append(r[0].transcript); }
+      else interim += r[0].transcript;
+    }
+    interimEl.textContent = interim;
+  };
+  rec.onerror = e => {
+    const msgs = {
+      'not-allowed': "Accès au micro refusé. Autorise le micro dans ton navigateur puis réessaie.",
+      'service-not-allowed': "Le service de reconnaissance est bloqué dans ce navigateur. Essaie Google Chrome.",
+      'network': "Problème de connexion : la reconnaissance vocale a besoin d'internet.",
+      'audio-capture': "Aucun micro trouvé sur cet appareil.",
+      'language-not-supported': "Cette langue n'est pas prise en charge par ton navigateur. Choisis-en une autre."
+    };
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    showErr(msgs[e.error] || "Erreur : " + e.error);
+    if (e.error !== 'network') stop();
+  };
+  // Chrome coupe après un silence : on relance tant que l'utilisateur n'a pas arrêté
+  rec.onend = () => { if (listening) { try { rec.start(); } catch (_) {} } };
+}
+function start(){
+  if (!SR) { showErr("Ton navigateur ne gère pas la reconnaissance vocale. Ouvre cette page dans Google Chrome ou Microsoft Edge."); return; }
+  hideErr(); speechSynthesis.cancel();
+  setup();
+  try { rec.start(); } catch (_) {}
+  listening = true;
+  mic.classList.add('on');
+  mic.setAttribute('aria-label', 'Arrêter la dictée (Ctrl+M)');
+  statusEl.textContent = 'Écoute en cours… parle !';
+  startTime = lastSpeech = Date.now(); updateTimer();
+  tick = setInterval(updateTimer, 1000);
+  startWave();
+}
+function stop(silent){
+  if (!listening) return;
+  listening = false;
+  if (rec) rec.stop();
+  mic.classList.remove('on');
+  mic.setAttribute('aria-label', 'Démarrer la dictée (Ctrl+M)');
+  statusEl.textContent = 'Arrêté';
+  interimEl.textContent = '';
+  clearInterval(tick);
+  stopWave();
+  if (!silent) saveHistory();
+}
+
+// ---------- Lecture à voix haute ----------
+function readAloud(){
+  if (!out.value.trim()) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(out.value);
+  u.lang = langSel.value.replace(/^cmn-Hans-/, 'zh-').replace(/^cmn-Hant-/, 'zh-').replace(/^yue-Hant-/, 'zh-');
+  speechSynthesis.speak(u);
+}
+
+// ---------- Historique ----------
+function getHist(){ try { return JSON.parse(localStorage.getItem('dv-hist') || '[]'); } catch (_) { return []; } }
+function setHist(h){ try { localStorage.setItem('dv-hist', JSON.stringify(h)); } catch (_) {} renderHist(); }
+function saveHistory(){
+  const t = out.value.trim();
+  if (!t) return;
+  const h = getHist();
+  if (h[0] && h[0].text === t) return;
+  h.unshift({ text: t, lang: langSel.value, date: new Date().toLocaleString('fr-FR') });
+  setHist(h.slice(0, 15));
+}
+function renderHist(){
+  const h = getHist();
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  $('hist').innerHTML = h.length ? h.map((x, i) =>
+    `<li><span title="${esc(x.text)}">${esc(x.text)}</span><small>${esc(x.date)}</small>
+     <button class="b" data-o="${i}">Ouvrir</button><button class="b" data-d="${i}" aria-label="Supprimer">✕</button></li>`).join('')
+    : '<li class="empty">Tes dictées apparaîtront ici quand tu arrêtes le micro.</li>';
+}
+$('hist').addEventListener('click', e => {
+  const o = e.target.dataset.o, d = e.target.dataset.d, h = getHist();
+  if (o !== undefined) { pushUndo(); out.value = h[o].text; updateCount(); }
+  if (d !== undefined) { h.splice(d, 1); setHist(h); }
+});
+
+// ---------- Boutons ----------
+mic.addEventListener('click', () => listening ? stop() : start());
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') { e.preventDefault(); listening ? stop() : start(); } });
+out.addEventListener('input', updateCount);
+$('copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(out.value); }
+  catch (_) { out.select(); document.execCommand('copy'); }
+  statusEl.textContent = 'Texte copié ✔';
+});
+$('read').addEventListener('click', readAloud);
+$('save').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([out.value], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'transcription.txt'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('undo').addEventListener('click', undo);
+$('clear').addEventListener('click', clearAll);
+
+try { out.value = localStorage.getItem('dv-draft') || ''; } catch (_) {}
+updateCount(); renderHist();
+if (!SR) showErr("Ton navigateur ne gère pas la reconnaissance vocale. Ouvre cette page dans Google Chrome ou Microsoft Edge.");
+
+// ---------- Installation comme appli (PWA) ----------
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('install').hidden = false; });
+$('install').addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; $('install').hidden = true; });
+window.addEventListener('appinstalled', () => { $('install').hidden = true; });
+}
+</script>
+</body>
+</html>
